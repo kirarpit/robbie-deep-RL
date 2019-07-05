@@ -28,6 +28,7 @@ ENV_DEFAULT_CONFIG = {
     "max_steps": 200,
     "vision_type": "von_neumann",
     "vision_radius": 1,
+    "alpha": 0,
     "rewards": {
         "robot_wall_collision": -1,
         "can_picked": 1,
