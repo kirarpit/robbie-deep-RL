@@ -23,20 +23,6 @@ tune.run(
     name="melanies_robbie",
     config={
         "env": "can_picking",
-
-        # hyper-parameters
-        # GAE: lambda to reduce variance
-        "lambda": 0.95,
-
-        # For sharing value function network with the policy
-        # "vf_share_layers": False,
-
-        # PPO policy clipping
-        # "clip_param": 0.3,
-
-        # GAE: Trust region optimization for value function
-        "vf_clip_param": 0.4,
-
         "num_workers": 2,
         "sample_batch_size": 64,
         "train_batch_size": 4096,
@@ -48,6 +34,8 @@ tune.run(
             "num_robots": 1,
         },
         "model": {
+            "use_lstm": True,
+            "lstm_cell_size": 64,
             "fcnet_hiddens": [64, 64],
         },
     },
