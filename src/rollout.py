@@ -33,12 +33,7 @@ Example Usage via executable:
 #
 # ModelCatalog.register_custom_model("pa_model", ParametricActionsModel)
 # register_env("pa_cartpole", lambda _: ParametricActionCartpole(10))
-# ModelCatalog.register_custom_model("lidar_conv_model", LidarConv)
-# register_env("payload_delivery_monitor", lambda env_config: Monitor(PayloadDelivery(env_config),
-#                                                             'videos/',
-#                                                             video_callable='all',
-#                                                             force=True,
-#                                                             mode='evaluation'))
+
 register_env("can_picking", lambda env_config: CanPickingEnv(env_config))
 
 

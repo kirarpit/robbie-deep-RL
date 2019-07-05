@@ -1,2 +1,2 @@
 #!/bin/bash
-python rollout.py --env can_picking --run PPO $*
+python -m src.rollout --env can_picking --run PPO $*
