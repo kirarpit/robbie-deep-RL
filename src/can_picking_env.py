@@ -2,8 +2,10 @@ from gym import spaces
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 import numpy as np
 import time
+import warnings
 
 from src.utils import merge_dicts, init_dict
+from src.maze import Maze
 
 # Type of channels
 WALL_CHANNEL = 0
@@ -23,6 +25,8 @@ NUM_ACTS = 7
 ENV_DEFAULT_CONFIG = {
     "width": 10,
     "height": 10,
+    # Can specify name of the files inside the folder "mazes" without the extension. For example, "four_rooms".
+    "maze": None,
     "num_robots": 2,
     "num_cans": 10,
     "max_steps": 200,
@@ -44,6 +48,7 @@ class CanPickingEnv(MultiAgentEnv):
         if not all(key in ENV_DEFAULT_CONFIG for key in custom_keys):
             raise KeyError("Custom environment configuration not found in default configuration.")
         self.config = merge_dicts(ENV_DEFAULT_CONFIG, config)
+        self._process_and_validate_config()
 
         self.grid = None
         self.robot_positions = None
@@ -57,6 +62,14 @@ class CanPickingEnv(MultiAgentEnv):
         self.metadata = {'render.modes': ['human', 'rgb_array']}
         self.spec = None
         self.viewer = None
+
+    def _process_and_validate_config(self):
+        if self.config["maze"] is not None:
+            maze = Maze(self.config["maze"])
+            self.config["height"] = maze.height
+            self.config["width"] = maze.width
+            self.config["maze"] = maze
+            warnings.warn("Maze associated parameters like height and width were overridden because of custom maze!")
 
     def get_observation_space(self):
         num_channels = int(self.config["num_robots"] > 1) + 2
@@ -82,12 +95,18 @@ class CanPickingEnv(MultiAgentEnv):
         grid[WALL_CHANNEL, :, [0, -1]] = 1
         grid[WALL_CHANNEL, [0, -1], :] = 1
 
+        # Get wall cells from the custom maze file if given
+        if self.config["maze"] is not None:
+            wall_cells = self.config["maze"].get_walls()
+            wall_cells = (wall_cells[0]+1, wall_cells[1]+1)
+            grid[WALL_CHANNEL][wall_cells] = 1
+
         # Generate cans positions
-        can_locations = np.zeros((height*width))
-        can_locations[:self.config["num_cans"]] = 1
-        np.random.shuffle(can_locations)
-        can_locations = can_locations.reshape(height, width)
-        grid[CAN_CHANNEL, 1:-1, 1:-1] = can_locations
+        available_positions = np.where(grid[WALL_CHANNEL] != 1)
+        available_positions = list(zip(*available_positions))
+        np.random.shuffle(available_positions)
+        can_locations = available_positions[:self.config["num_cans"]]
+        grid[CAN_CHANNEL][tuple(zip(*can_locations))] = 1
 
         # Generate robots positions
         grid[ROBOT_CHANNEL, 1, 1] = self.config["num_robots"]
