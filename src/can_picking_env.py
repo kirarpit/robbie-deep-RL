@@ -30,6 +30,7 @@ ENV_DEFAULT_CONFIG = {
     "num_robots": 2,
     "num_cans": 10,
     "max_steps": 200,
+    # Possible options are "von_neumann" and "box".
     "vision_type": "von_neumann",
     "vision_radius": 1,
     "alpha": 0,
@@ -71,12 +72,22 @@ class CanPickingEnv(MultiAgentEnv):
             self.config["maze"] = maze
             warnings.warn("Maze associated parameters like height and width were overridden because of custom maze!")
 
+        if self.config["vision_type"] not in ["von_neumann", "box"]:
+            raise ValueError("Vision type {} not supported".format(self.config["vision_type"]))
+
+        if self.config["vision_type"] == "von_neumann" and self.config["vision_radius"] != 1:
+            raise ValueError("Vision radius != 1 not supported in case of Von Neumann Neighborhood")
+
     def get_observation_space(self):
         num_channels = int(self.config["num_robots"] > 1) + 2
+        num_cells = None
+
         if self.config["vision_type"] == "von_neumann":
-            return spaces.Box(0, self.config["num_robots"], (num_channels*5, ), dtype=np.int)
-        else:
-            raise ValueError("Vision type {} not supported".format(self.config["vision_type"]))
+            num_cells = 5
+        elif self.config["vision_type"] == "box":
+            num_cells = (2*self.config["vision_radius"] + 1) ** 2
+
+        return spaces.Box(0, self.config["num_robots"], (num_channels*num_cells, ), dtype=np.int)
 
     def reset(self):
         """Resets the env and returns observations from ready agents.
@@ -205,16 +216,38 @@ class CanPickingEnv(MultiAgentEnv):
             self.grid[ROBOT_CHANNEL, robot_pos[0], robot_pos[1]] -= 1
 
             obs = []
+            num_channels = int(self.config["num_robots"] > 1) + 2
+
             if self.config["vision_type"] == "von_neumann":
-                num_channels = int(self.config["num_robots"] > 1) + 2
-                neighbors = self.get_von_neumann_neighs(robot_pos, self.config["vision_radius"])
+                neighbors = self.get_von_neumann_neighs(robot_pos)
                 for neighbor in neighbors:
                     obs.append(self.grid[:num_channels, neighbor[0], neighbor[1]])
-                obs = np.ravel(obs)
-            else:
-                raise ValueError("Vision type {} not supported".format(self.config["vision_type"]))
 
-            obs_dict[idx] = obs
+            elif self.config["vision_type"] == "box":
+                obs = np.zeros((num_channels, 2*self.config["vision_radius"]+1, 2*self.config["vision_radius"]+1))
+                start_row = 0
+                start_col = 0
+
+                row_min = robot_pos[0] - self.config["vision_radius"]
+                col_min = robot_pos[1] - self.config["vision_radius"]
+
+                if row_min < 0:
+                    start_row += abs(row_min)
+                    row_min = max(0, row_min)
+
+                if col_min < 0:
+                    start_col += abs(col_min)
+                    col_min = max(0, col_min)
+
+                row_max = min(robot_pos[0] + self.config["vision_radius"], self.config["height"]) + 1
+                col_max = min(robot_pos[1] + self.config["vision_radius"], self.config["width"]) + 1
+
+                end_row = start_row + row_max - row_min
+                end_col = start_col + col_max - col_min
+                obs[:num_channels, start_row:end_row, start_col:end_col] =\
+                    self.grid[:num_channels, row_min:row_max, col_min:col_max]
+
+            obs_dict[idx] = np.ravel(obs)
 
             # adding the current robot back
             self.grid[ROBOT_CHANNEL, robot_pos[0], robot_pos[1]] += 1
@@ -227,10 +260,8 @@ class CanPickingEnv(MultiAgentEnv):
         self.grid[ROBOT_CHANNEL, new_pos[0], new_pos[1]] += 1
         self.robot_positions[idx] = new_pos
 
-    def get_von_neumann_neighs(self, pos, radius=1):
+    def get_von_neumann_neighs(self, pos):
         result = [pos]
-        if radius > 1:
-            raise ValueError("Vision radius > 1 not supported in case of Von Neumann Neighborhood")
 
         neighs = [(-1, 0), (1, 0), (0, 1), (0, -1)]
         for neigh in neighs:
